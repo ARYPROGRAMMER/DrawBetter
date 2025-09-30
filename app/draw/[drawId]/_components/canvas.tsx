@@ -549,6 +549,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
       className={`h-full w-full relative bg-neutral-100 touch-none ${
         canvasState.mode === CanvasMode.Panning ? "cursor-grab" : ""
       }`}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <Info drawId={drawId} />
       <Participants />
@@ -570,6 +571,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
         onPointerLeave={onPointerLeave}
         onPointerUp={onPointerUp}
         onPointerDown={onPointerDown}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <g
           style={{
