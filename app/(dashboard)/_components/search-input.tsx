@@ -19,12 +19,14 @@ export const SearchInput = () => {
   };
 
   useEffect(() => {
+    const currentFavorites = searchParams.get("favorites");
+    
     const url = qs.stringifyUrl(
       {
         url: "/",
         query: {
           search: debouncedValue,
-          favorites: searchParams.get("favorites"),
+          favorites: currentFavorites,
         },
       },
       { skipEmptyString: true, skipNull: true }
