@@ -11,7 +11,7 @@ export const SearchInput = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(searchParams.get("search") || "");
   const [debouncedValue] = useDebounceValue(value, 500);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -19,12 +19,14 @@ export const SearchInput = () => {
   };
 
   useEffect(() => {
+    const currentFavorites = searchParams.get("favorites");
+    
     const url = qs.stringifyUrl(
       {
         url: "/",
         query: {
           search: debouncedValue,
-          favorites: searchParams.get("favorites"),
+          favorites: currentFavorites,
         },
       },
       { skipEmptyString: true, skipNull: true }
