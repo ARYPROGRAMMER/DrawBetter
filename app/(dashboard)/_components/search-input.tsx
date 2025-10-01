@@ -2,13 +2,14 @@
 
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import qs from "query-string";
 import { ChangeEvent, useEffect, useState } from "react";
 import { useDebounceValue } from "usehooks-ts";
 
 export const SearchInput = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [value, setValue] = useState("");
   const [debouncedValue] = useDebounceValue(value, 500);
@@ -23,13 +24,14 @@ export const SearchInput = () => {
         url: "/",
         query: {
           search: debouncedValue,
+          favorites: searchParams.get("favorites"),
         },
       },
       { skipEmptyString: true, skipNull: true }
     );
 
     router.push(url);
-  }, [debouncedValue, router]);
+  }, [debouncedValue, router, searchParams]);
 
   return (
     <div className="w-full relative">

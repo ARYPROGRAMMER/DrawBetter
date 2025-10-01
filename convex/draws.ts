@@ -26,7 +26,14 @@ export const get = query({
 
       const draws = await getAllOrThrow(ctx.db, ids);
 
-      return draws.map((draw) => ({ ...draw, isFavorite: true }));
+      const title = args.search as string;
+      const filteredDraws = title
+        ? draws.filter((draw) =>
+            draw.title.toLowerCase().includes(title.toLowerCase())
+          )
+        : draws;
+
+      return filteredDraws.map((draw) => ({ ...draw, isFavorite: true }));
     }
 
     const title = args.search as string;
