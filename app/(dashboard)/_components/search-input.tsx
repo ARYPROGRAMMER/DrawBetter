@@ -11,7 +11,7 @@ export const SearchInput = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(searchParams.get("search") || "");
   const [debouncedValue] = useDebounceValue(value, 500);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
