@@ -16,6 +16,7 @@ import {
   CanvasMode,
   CanvasState,
   Color,
+  Layer,
   LayerType,
   Point,
   Side,
@@ -44,8 +45,10 @@ import { LiveObject } from "@liveblocks/client";
 import { LayerPreview } from "./layer-preview";
 import { SelectionBox } from "./selection-box";
 import { SelectionTools } from "./selection-tools";
+import { SelectionContextMenu } from "./selection-context-menu";
 import { Path } from "./path";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
+import { useClipboard } from "@/store/use-clipboard";
 
 const MAX_LAYERS = Number.POSITIVE_INFINITY;
 
@@ -55,6 +58,9 @@ interface CanvasProps {
 
 const Canvas = ({ drawId }: CanvasProps) => {
   const layerIds = useStorage((root) => root.layerIds);
+  const layers = useStorage((root) => root.layers);
+  const selection = useSelf((me) => me?.presence.selection);
+  const { copiedLayers, setCopiedLayers } = useClipboard();
 
   const pencilDraft = useSelf((me) => me.presence.pencilDraft);
 
@@ -78,6 +84,14 @@ const Canvas = ({ drawId }: CanvasProps) => {
     r: 255,
     g: 255,
     b: 255,
+  });
+
+  const [contextMenu, setContextMenu] = useState<{
+    isVisible: boolean;
+    position: { x: number; y: number };
+  }>({
+    isVisible: false,
+    position: { x: 0, y: 0 },
   });
 
   useEffect(() => {
@@ -322,6 +336,38 @@ const Canvas = ({ drawId }: CanvasProps) => {
     [lastUsedColor]
   );
 
+  const pasteFromClipboard = useMutation(
+    ({ storage, setMyPresence }) => {
+      if (!copiedLayers || copiedLayers.length === 0) {
+        return;
+      }
+
+      const liveLayers = storage.get("layers");
+      const liveLayerIds = storage.get("layerIds");
+      const newLayerIds: string[] = [];
+
+      // Paste layers with slight offset
+      const offset = 20;
+      
+      for (const layer of copiedLayers) {
+        const layerId = nanoid();
+        const newLayer = {
+          ...layer,
+          x: layer.x + offset,
+          y: layer.y + offset,
+        };
+        
+        liveLayers.set(layerId, new LiveObject(newLayer));
+        liveLayerIds.push(layerId);
+        newLayerIds.push(layerId);
+      }
+
+      // Select the newly pasted layers
+      setMyPresence({ selection: newLayerIds }, { addToHistory: true });
+    },
+    [copiedLayers]
+  );
+
   const resizeSelectedLayer = useMutation(
     ({ storage, self }, point: Point) => {
       if (canvasState.mode !== CanvasMode.Resizing) {
@@ -437,8 +483,18 @@ const Canvas = ({ drawId }: CanvasProps) => {
     });
   }, []);
 
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({
+      isVisible: false,
+      position: { x: 0, y: 0 },
+    });
+  }, []);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // Close context menu on any pointer down
+      closeContextMenu();
+
       const point = pointerEventToCanvasPoint(e, camera);
 
       if (e.button === 1) {
@@ -473,7 +529,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
         mode: CanvasMode.Pressing,
       });
     },
-    [camera, setCanvasState, startDrawing, canvasState]
+    [camera, setCanvasState, startDrawing, canvasState, closeContextMenu]
   );
 
   const onPointerUp = useMutation(
@@ -576,6 +632,29 @@ const Canvas = ({ drawId }: CanvasProps) => {
 
   const deleteLayers = useDeleteLayers();
 
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      
+      // Get the mouse position relative to the viewport
+      const x = e.clientX;
+      const y = e.clientY;
+
+      setContextMenu({
+        isVisible: true,
+        position: { x, y },
+      });
+    },
+    []
+  );
+
+
+
+  // Close context menu when selection changes
+  useEffect(() => {
+    closeContextMenu();
+  }, [selection, closeContextMenu]);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       switch (e.key) {
@@ -647,6 +726,68 @@ const Canvas = ({ drawId }: CanvasProps) => {
             break;
           }
         }
+        case "c": {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            console.log('Ctrl+C pressed, selection:', selection);
+            if (selection && selection.length > 0) {
+              const selectedLayers = selection
+                .map((layerId) => layers.get(layerId))
+                .filter((layer): layer is Layer => layer !== undefined);
+              
+              if (selectedLayers.length > 0) {
+                const clonedLayers = selectedLayers.map(layer => ({ ...layer }));
+                setCopiedLayers(clonedLayers);
+                console.log(`✅ Copied ${selectedLayers.length} layer(s) with Ctrl+C`, clonedLayers);
+              } else {
+                console.log('❌ No valid layers found to copy');
+              }
+            } else {
+              console.log('❌ No selection to copy');
+            }
+            break;
+          }
+        }
+        case "x": {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            console.log('Ctrl+X pressed, selection:', selection);
+            if (selection && selection.length > 0) {
+              const selectedLayers = selection
+                .map((layerId) => layers.get(layerId))
+                .filter((layer): layer is Layer => layer !== undefined);
+              
+              if (selectedLayers.length > 0) {
+                const clonedLayers = selectedLayers.map(layer => ({ ...layer }));
+                setCopiedLayers(clonedLayers);
+                console.log(`✅ Cut ${selectedLayers.length} layer(s) with Ctrl+X`, clonedLayers);
+                deleteLayers();
+              } else {
+                console.log('❌ No valid layers found to cut');
+              }
+            } else {
+              console.log('❌ No selection to cut');
+            }
+            break;
+          }
+        }
+        case "v": {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            console.log('Ctrl+V pressed, copiedLayers:', copiedLayers);
+            if (copiedLayers && copiedLayers.length > 0) {
+              pasteFromClipboard();
+              console.log('✅ Pasted layers with Ctrl+V');
+            } else {
+              console.log('❌ No layers in clipboard to paste');
+            }
+            break;
+          }
+          // Fallback to selection tool if not paste
+          e.preventDefault();
+          setCanvasState({ mode: CanvasMode.None });
+          break;
+        }
         // Zoom shortcuts
         case "=":
         case "+": {
@@ -683,7 +824,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
     return () => {
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [deleteLayers, history, setCanvasState]);
+  }, [deleteLayers, history, setCanvasState, layers, pasteFromClipboard, selection, setCopiedLayers]);
 
   return (
     <main
@@ -719,7 +860,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
         onPointerLeave={onPointerLeave}
         onPointerUp={onPointerUp}
         onPointerDown={onPointerDown}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={onContextMenu}
       >
         <g
           style={{
@@ -759,6 +900,13 @@ const Canvas = ({ drawId }: CanvasProps) => {
           )}
         </g>
       </svg>
+      
+      <SelectionContextMenu
+        isVisible={contextMenu.isVisible}
+        position={contextMenu.position}
+        onClose={closeContextMenu}
+        camera={camera}
+      />
     </main>
   );
 };
