@@ -44,6 +44,7 @@ import { LiveObject } from "@liveblocks/client";
 import { LayerPreview } from "./layer-preview";
 import { SelectionBox } from "./selection-box";
 import { SelectionTools } from "./selection-tools";
+import { SelectionContextMenu } from "./selection-context-menu";
 import { Path } from "./path";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
 
@@ -78,6 +79,14 @@ const Canvas = ({ drawId }: CanvasProps) => {
     r: 255,
     g: 255,
     b: 255,
+  });
+
+  const [contextMenu, setContextMenu] = useState<{
+    isVisible: boolean;
+    position: { x: number; y: number };
+  }>({
+    isVisible: false,
+    position: { x: 0, y: 0 },
   });
 
   useEffect(() => {
@@ -437,8 +446,18 @@ const Canvas = ({ drawId }: CanvasProps) => {
     });
   }, []);
 
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({
+      isVisible: false,
+      position: { x: 0, y: 0 },
+    });
+  }, []);
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // Close context menu on any pointer down
+      closeContextMenu();
+
       const point = pointerEventToCanvasPoint(e, camera);
 
       if (e.button === 1) {
@@ -473,7 +492,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
         mode: CanvasMode.Pressing,
       });
     },
-    [camera, setCanvasState, startDrawing, canvasState]
+    [camera, setCanvasState, startDrawing, canvasState, closeContextMenu]
   );
 
   const onPointerUp = useMutation(
@@ -575,6 +594,37 @@ const Canvas = ({ drawId }: CanvasProps) => {
   }, [selections]);
 
   const deleteLayers = useDeleteLayers();
+
+  const selection = useSelf((me) => me?.presence.selection);
+
+  const onContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      
+      // Only show context menu if there are selected elements
+      if (!selection || selection.length === 0) {
+        return;
+      }
+
+      // Get the mouse position relative to the viewport
+      const rect = (e.target as Element).getBoundingClientRect();
+      const x = e.clientX;
+      const y = e.clientY;
+
+      setContextMenu({
+        isVisible: true,
+        position: { x, y },
+      });
+    },
+    [selection]
+  );
+
+
+
+  // Close context menu when selection changes
+  useEffect(() => {
+    closeContextMenu();
+  }, [selection, closeContextMenu]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -719,7 +769,7 @@ const Canvas = ({ drawId }: CanvasProps) => {
         onPointerLeave={onPointerLeave}
         onPointerUp={onPointerUp}
         onPointerDown={onPointerDown}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={onContextMenu}
       >
         <g
           style={{
@@ -759,6 +809,14 @@ const Canvas = ({ drawId }: CanvasProps) => {
           )}
         </g>
       </svg>
+      
+      <SelectionContextMenu
+        isVisible={contextMenu.isVisible}
+        position={contextMenu.position}
+        onClose={closeContextMenu}
+        camera={camera}
+        setLastUsedColor={setLastUsedColor}
+      />
     </main>
   );
 };
