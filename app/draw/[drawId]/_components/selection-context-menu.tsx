@@ -9,12 +9,11 @@ import {
   Copy,
   Scissors,
   Image,
-  FileText,
-  X
+  FileText
 } from "lucide-react";
 import { useDeleteLayers } from "@/hooks/use-delete-layers";
 import { useMutation, useSelf, useStorage } from "@/liveblocks.config";
-import { Camera, Color } from "@/types/canvas";
+import { Camera, Layer } from "@/types/canvas";
 import { exportSelectedElements } from "@/lib/export-utils";
 
 interface SelectionContextMenuProps {
@@ -22,15 +21,13 @@ interface SelectionContextMenuProps {
   position: { x: number; y: number };
   onClose: () => void;
   camera: Camera;
-  setLastUsedColor: (color: Color) => void;
 }
 
 export const SelectionContextMenu = React.memo(({
   isVisible,
   position,
   onClose,
-  camera,
-  setLastUsedColor
+  camera
 }: SelectionContextMenuProps) => {
   const selection = useSelf((me) => me?.presence.selection);
   const layers = useStorage((root) => root.layers);
@@ -89,7 +86,7 @@ export const SelectionContextMenu = React.memo(({
       // Get selected layers data
       const selectedLayers = selection
         .map((layerId) => layers.get(layerId))
-        .filter(Boolean);
+        .filter((layer): layer is Layer => layer !== undefined);
       
       await exportSelectedElements(selectedLayers, format, camera);
       onClose();
@@ -168,7 +165,7 @@ export const SelectionContextMenu = React.memo(({
         disabled={isExporting}
         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
       >
-        <Image className="h-4 w-4" />
+        <Image className="h-4 w-4" aria-label="PNG export icon" />
         Export as PNG
       </button>
       
@@ -186,7 +183,7 @@ export const SelectionContextMenu = React.memo(({
         disabled={isExporting}
         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
       >
-        <Image className="h-4 w-4" />
+        <Image className="h-4 w-4" aria-label="JPG export icon" />
         Export as JPG
       </button>
       

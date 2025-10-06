@@ -607,7 +607,6 @@ const Canvas = ({ drawId }: CanvasProps) => {
       }
 
       // Get the mouse position relative to the viewport
-      const rect = (e.target as Element).getBoundingClientRect();
       const x = e.clientX;
       const y = e.clientY;
 
@@ -815,7 +814,6 @@ const Canvas = ({ drawId }: CanvasProps) => {
         position={contextMenu.position}
         onClose={closeContextMenu}
         camera={camera}
-        setLastUsedColor={setLastUsedColor}
       />
     </main>
   );

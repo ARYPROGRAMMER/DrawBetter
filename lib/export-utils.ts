@@ -1,3 +1,5 @@
+import { Layer } from "@/types/canvas";
+
 export type ExportFormat = "svg" | "png" | "jpg" | "pdf";
 export type ExportQuality = "low" | "medium" | "high" | "ultra";
 export type ExportTheme = "light" | "dark" | "transparent";
@@ -474,7 +476,7 @@ function getQualityValue(quality: ExportQuality): number {
 
 // Export selected elements only
 export async function exportSelectedElements(
-  selectedLayers: any[], 
+  selectedLayers: Layer[], 
   format: 'svg' | 'png' | 'jpg' | 'pdf', 
   camera: { x: number; y: number; zoom: number },
   quality: ExportQuality = 'high', 
