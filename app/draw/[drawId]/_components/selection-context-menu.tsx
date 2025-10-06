@@ -15,6 +15,9 @@ import { useDeleteLayers } from "@/hooks/use-delete-layers";
 import { useMutation, useSelf, useStorage } from "@/liveblocks.config";
 import { Camera, Layer } from "@/types/canvas";
 import { exportSelectedElements } from "@/lib/export-utils";
+import { useClipboard } from "@/store/use-clipboard";
+import { nanoid } from "nanoid";
+import { LiveObject } from "@liveblocks/client";
 
 interface SelectionContextMenuProps {
   isVisible: boolean;
@@ -32,6 +35,7 @@ export const SelectionContextMenu = React.memo(({
   const selection = useSelf((me) => me?.presence.selection);
   const layers = useStorage((root) => root.layers);
   const deleteLayers = useDeleteLayers();
+  const { copiedLayers, setCopiedLayers } = useClipboard();
 
   const [isExporting, setIsExporting] = useState(false);
 
@@ -78,6 +82,39 @@ export const SelectionContextMenu = React.memo(({
     [selection, onClose]
   );
 
+  const pasteFromClipboard = useMutation(
+    ({ storage, setMyPresence }) => {
+      if (!copiedLayers || copiedLayers.length === 0) {
+        return;
+      }
+
+      const liveLayers = storage.get("layers");
+      const liveLayerIds = storage.get("layerIds");
+      const newLayerIds: string[] = [];
+
+      // Paste layers with slight offset
+      const offset = 20;
+      
+      for (const layer of copiedLayers) {
+        const layerId = nanoid();
+        const newLayer = {
+          ...layer,
+          x: layer.x + offset,
+          y: layer.y + offset,
+        };
+        
+        liveLayers.set(layerId, new LiveObject(newLayer));
+        liveLayerIds.push(layerId);
+        newLayerIds.push(layerId);
+      }
+
+      // Select the newly pasted layers
+      setMyPresence({ selection: newLayerIds }, { addToHistory: true });
+      onClose();
+    },
+    [copiedLayers, onClose]
+  );
+
   const handleExport = async (format: 'svg' | 'png' | 'jpg' | 'pdf') => {
     if (isExporting || !selection || selection.length === 0) return;
     
@@ -104,15 +141,52 @@ export const SelectionContextMenu = React.memo(({
   };
 
   const handleCopy = () => {
-    // TODO: Implement copy functionality
-    console.log('Copy functionality not implemented yet');
+    if (!selection || selection.length === 0) {
+      onClose();
+      return;
+    }
+
+    // Get selected layers data
+    const selectedLayers = selection
+      .map((layerId) => layers.get(layerId))
+      .filter((layer): layer is Layer => layer !== undefined);
+
+    if (selectedLayers.length > 0) {
+      // Deep clone the layers to avoid reference issues
+      const clonedLayers = selectedLayers.map(layer => ({ ...layer }));
+      setCopiedLayers(clonedLayers);
+      console.log(`Copied ${selectedLayers.length} layer(s) to clipboard`);
+    }
+    
     onClose();
   };
 
   const handleCut = () => {
-    // TODO: Implement cut functionality
-    console.log('Cut functionality not implemented yet');
+    if (!selection || selection.length === 0) {
+      onClose();
+      return;
+    }
+
+    // Get selected layers data
+    const selectedLayers = selection
+      .map((layerId) => layers.get(layerId))
+      .filter((layer): layer is Layer => layer !== undefined);
+
+    if (selectedLayers.length > 0) {
+      // Deep clone the layers to avoid reference issues
+      const clonedLayers = selectedLayers.map(layer => ({ ...layer }));
+      setCopiedLayers(clonedLayers);
+      console.log(`Cut ${selectedLayers.length} layer(s) to clipboard`);
+      
+      // Delete the selected layers after copying
+      deleteLayers();
+    }
+    
     onClose();
+  };
+
+  const handlePaste = () => {
+    pasteFromClipboard();
   };
 
   // Close menu when clicking outside or pressing Escape
@@ -141,9 +215,11 @@ export const SelectionContextMenu = React.memo(({
     };
   }, [isVisible, onClose]);
 
-  if (!isVisible || !selection || selection.length === 0) {
+  if (!isVisible) {
     return null;
   }
+
+  const hasSelection = selection && selection.length > 0;
 
   return (
     <div
@@ -155,10 +231,12 @@ export const SelectionContextMenu = React.memo(({
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Export Options */}
-      <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-gray-100">
-        Export Selection
-      </div>
+      {hasSelection && (
+        <>
+          {/* Export Options */}
+          <div className="px-2 py-1 text-xs font-medium text-gray-500 border-b border-gray-100">
+            Export Selection
+          </div>
       
       <button
         onClick={() => handleExport('png')}
@@ -196,12 +274,12 @@ export const SelectionContextMenu = React.memo(({
         Export as PDF
       </button>
 
-      <div className="border-t border-gray-100 mt-1 mb-1" />
+          <div className="border-t border-gray-100 mt-1 mb-1" />
 
-      {/* Layer Actions */}
-      <button
-        onClick={moveToFront}
-        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          {/* Layer Actions */}
+          <button
+            onClick={moveToFront}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
       >
         <BringToFront className="h-4 w-4" />
         Bring to Front
@@ -215,12 +293,12 @@ export const SelectionContextMenu = React.memo(({
         Send to Back
       </button>
 
-      <div className="border-t border-gray-100 mt-1 mb-1" />
+          <div className="border-t border-gray-100 mt-1 mb-1" />
 
-      {/* Edit Actions */}
-      <button
-        onClick={handleCopy}
-        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          {/* Edit Actions */}
+          <button
+            onClick={handleCopy}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
       >
         <Copy className="h-4 w-4" />
         Copy
@@ -233,17 +311,34 @@ export const SelectionContextMenu = React.memo(({
         <Scissors className="h-4 w-4" />
         Cut
       </button>
-
-      <div className="border-t border-gray-100 mt-1 mb-1" />
-
-      {/* Delete Action */}
+      
+        </>
+      )}
+      
+      {/* Paste - always available */}
       <button
-        onClick={handleDelete}
-        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+        onClick={handlePaste}
+        disabled={!copiedLayers || copiedLayers.length === 0}
+        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <Trash2 className="h-4 w-4" />
-        Delete
+        <FileText className="h-4 w-4" />
+        Paste ({copiedLayers?.length || 0} items)
       </button>
+
+      {hasSelection && (
+        <>
+          <div className="border-t border-gray-100 mt-1 mb-1" />
+
+          {/* Delete Action */}
+          <button
+            onClick={handleDelete}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        </>
+      )}
     </div>
   );
 });
