@@ -471,3 +471,156 @@ function getQualityValue(quality: ExportQuality): number {
     default: return 0.95;
   }
 }
+
+// Export selected elements only
+export async function exportSelectedElements(
+  selectedLayers: any[], 
+  format: 'svg' | 'png' | 'jpg' | 'pdf', 
+  camera: { x: number; y: number; zoom: number },
+  quality: ExportQuality = 'high', 
+  theme: ExportTheme = 'light', 
+  filename: string = 'selection'
+): Promise<void> {
+  try {
+    console.log('🎯 Starting selected elements export...');
+    
+    if (!selectedLayers || selectedLayers.length === 0) {
+      throw new Error('No elements selected for export');
+    }
+
+    // Find the corresponding DOM elements for selected layers
+    const canvasSVG = document.querySelector('svg.h-\\[100vh\\]') as SVGElement;
+    if (!canvasSVG) {
+      throw new Error('Canvas SVG not found');
+    }
+
+    const transformGroup = canvasSVG.querySelector('g[style*="transform"]') as SVGGElement;
+    if (!transformGroup) {
+      throw new Error('Canvas transform group not found');
+    }
+
+    // Get all layer elements and find bounds of selected layers
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const selectedElements: Element[] = [];
+
+    // Calculate bounds of selected layers
+    for (const layer of selectedLayers) {
+      minX = Math.min(minX, layer.x);
+      minY = Math.min(minY, layer.y);
+      maxX = Math.max(maxX, layer.x + layer.width);
+      maxY = Math.max(maxY, layer.y + layer.height);
+    }
+
+    // Find corresponding DOM elements by checking their positions
+    const allLayerElements = Array.from(transformGroup.children).filter(child => {
+      const tagName = child.tagName.toLowerCase();
+      return ['rect', 'ellipse', 'path', 'foreignobject'].includes(tagName);
+    });
+
+    for (const element of allLayerElements) {
+      const style = element.getAttribute('style') || '';
+      const transformMatch = style.match(/transform:\s*translate\(([^)]+)\)/);
+      
+      if (transformMatch) {
+        const [translateX, translateY] = transformMatch[1].split(',').map(val => 
+          parseFloat(val.replace('px', '').trim())
+        );
+        
+        // Check if this element corresponds to any selected layer
+        const matchingLayer = selectedLayers.find(layer => 
+          Math.abs(layer.x - translateX) < 1 && Math.abs(layer.y - translateY) < 1
+        );
+        
+        if (matchingLayer) {
+          selectedElements.push(element);
+        }
+      }
+    }
+
+    if (selectedElements.length === 0) {
+      throw new Error('Could not find DOM elements for selected layers');
+    }
+
+    // Create export SVG for selected elements only
+    const padding = 20;
+    const exportWidth = Math.ceil(maxX - minX + padding * 2);
+    const exportHeight = Math.ceil(maxY - minY + padding * 2);
+    const viewBoxX = minX - padding;
+    const viewBoxY = minY - padding;
+
+    const exportSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    exportSVG.setAttribute('width', exportWidth.toString());
+    exportSVG.setAttribute('height', exportHeight.toString());
+    exportSVG.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${exportWidth} ${exportHeight}`);
+    exportSVG.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+    // Add styles
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    style.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap');
+      .text-element {
+        font-family: 'Kalam', cursive;
+        font-weight: 400;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        outline: none;
+      }
+    `;
+    defs.appendChild(style);
+    exportSVG.appendChild(defs);
+
+    // Add background if not transparent
+    if (theme !== 'transparent') {
+      const background = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      background.setAttribute('x', viewBoxX.toString());
+      background.setAttribute('y', viewBoxY.toString());
+      background.setAttribute('width', exportWidth.toString());
+      background.setAttribute('height', exportHeight.toString());
+      background.setAttribute('fill', theme === 'light' ? 'white' : '#1a1a1a');
+      exportSVG.appendChild(background);
+    }
+
+    // Clone and add selected elements
+    for (const element of selectedElements) {
+      const clonedElement = element.cloneNode(true) as SVGElement;
+      
+      if (clonedElement.tagName.toLowerCase() === 'foreignobject') {
+        const divElement = clonedElement.querySelector('div');
+        if (divElement) {
+          divElement.classList.add('text-element');
+          divElement.style.fontFamily = 'Kalam, cursive';
+        }
+      }
+      
+      exportSVG.appendChild(clonedElement);
+    }
+
+    const serializer = new XMLSerializer();
+    let svgString = serializer.serializeToString(exportSVG);
+    svgString = cleanSVGForExport(svgString);
+
+    // Export based on format
+    if (format === 'svg') {
+      const blob = new Blob([svgString], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${sanitizeFilename(filename)}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      const qualityValue = getQualityValue(quality);
+      await convertSVGToFormat(svgString, format, qualityValue, theme, filename);
+    }
+    
+    console.log('✅ Selected elements export successful');
+  } catch (error) {
+    console.error('❌ Selected elements export failed:', error);
+    throw error;
+  }
+}
